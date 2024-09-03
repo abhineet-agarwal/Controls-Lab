@@ -1,0 +1,60 @@
+import numpy as np
+import scipy.linalg
+from bayes_opt import BayesianOptimization
+
+# Define the system matrices from the MATLAB code
+A = np.array([
+    [0, 0, 1, 0],
+    [0, 0, 0, 1],
+    [0, 0.246, -0.18, 0],
+    [0, 2.53, -0.246, 0]
+])
+
+B = np.array([[0], [0], [0.09], [0.94]])
+
+def lqr_cost(Q1, Q2, Q3, Q4, R):
+    Q = np.diag([Q1, Q2, Q3, Q4])
+    R = np.array([[R]])
+
+    # Solve the continuous-time algebraic Riccati equation
+    P = scipy.linalg.solve_continuous_are(A, B, Q, R)
+
+    # Compute the optimal LQR gain matrix
+    K = np.dot(np.linalg.inv(R), np.dot(B.T, P))
+
+    # Simulate the system's closed-loop response (example criterion)
+    eigenvalues = np.linalg.eigvals(A - np.dot(B, K))
+    stability_cost = np.sum(np.abs(eigenvalues))  # Sum of eigenvalue magnitudes (stability measure)
+
+    # Simulate the response of the system to a step input
+    # Example: This can be modified to simulate your system over time to get alpha and theta
+    # You can use a method like odeint (scipy.integrate.odeint) to simulate the system
+    # Assume step response for a simple penalty calculation
+    theta_deviation = np.abs(30)  # Simulate and compute max deviation for theta (degrees)
+    alpha_deviation = np.abs(3)   # Simulate and compute max deviation for alpha (degrees)
+
+    # Add penalties for exceeding the desired constraints
+    theta_penalty = max(0, theta_deviation - 30)  # Penalize if theta exceeds ±30 degrees
+    alpha_penalty = max(0, alpha_deviation - 3)   # Penalize if alpha exceeds ±3 degrees
+
+    # Total cost
+    cost = stability_cost + 100 * theta_penalty + 100 * alpha_penalty  # Tune penalty weights as needed
+
+    return -cost  # Negate cost for minimization
+# Define bounds for Q and R (example bounds)
+pbounds = {'Q1': (1, 100), 'Q2': (1, 500), 'Q3': (1, 100), 'Q4': (1, 200), 'R': (0.1, 10)}
+
+# Perform Bayesian Optimization
+optimizer = BayesianOptimization(
+    f=lqr_cost,
+    pbounds=pbounds,
+    verbose=2,
+    random_state=1,
+)
+
+optimizer.maximize(
+    init_points=10,
+    n_iter=50,
+)
+
+print("Optimal Parameters:", optimizer.max)
